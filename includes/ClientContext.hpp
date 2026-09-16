@@ -10,12 +10,15 @@
 #include <cerrno>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <ctime>
+#include <cstdio>
+#include <sstream>
 #include "config/Parser.hpp"
 
-# include <sys/socket.h> // socket() bind() listen() accept() recv() send()
+# include <sys/socket.h>
 # include <cstring>
-# include <netinet/in.h> // sockaddr_in
-# include <arpa/inet.h> // inet_ntoa() inet_addr() htons() htonl() ntohs() ntohl()
+# include <netinet/in.h>
+# include <arpa/inet.h>
 # include <poll.h>
 
 enum ClientState {
@@ -36,18 +39,23 @@ class ClientContext {
 
     public:
         ServerConfig Config;
+
         std::string raw_buffer;
         std::string method;
         std::string path;
         std::string query_string;
         std::map<std::string, std::string> headers;
         std::string request_body;
+
         int status_code;
         std::string response_headers;
         std::string response_body;
+        std::string response_left;
 
-        int cgi_pipe_in[2];
+        // Używamy tylko potoku do odczytu danych z CGI
         int cgi_pipe_out[2];
+        std::string cgi_raw_output;
+        time_t cgi_start_time;
 
         ClientContext(int fd) 
             : _client_fd(fd), 
@@ -56,18 +64,26 @@ class ClientContext {
               _cgi_pid(-1), 
               _is_cgi(false),
               Config(),
-              status_code(200)
+              status_code(200),
+              cgi_raw_output(""),
+              cgi_start_time(0)
         {
-            cgi_pipe_in[0] = -1; cgi_pipe_in[1] = -1;
-            cgi_pipe_out[0] = -1; cgi_pipe_out[1] = -1;
+            cgi_pipe_out[0] = -1; 
+            cgi_pipe_out[1] = -1;
         }
 
         ~ClientContext() {
-            // (clearing pipes descriptors in a future)
+            // Zamknięcie potoków wyjściowych
+            if (cgi_pipe_out[0] != -1) close(cgi_pipe_out[0]);
+            if (cgi_pipe_out[1] != -1) close(cgi_pipe_out[1]);
+
+            // Automatyczne usunięcie pliku tymczasowego po zakończeniu żądania
+            std::stringstream ss;
+            ss << "/tmp/webserv_cgi_in_" << _client_fd;
+            std::remove(ss.str().c_str());
         }
 
         int getClientFd() const { return _client_fd; }
-
         ClientState getState() const { return _state; }
         void setState(ClientState state) { _state = state; }
 
@@ -76,7 +92,6 @@ class ClientContext {
 
         bool isCgi() const { return _is_cgi; }
         void setIsCgi(bool cgi) { _is_cgi = cgi; }
-
         pid_t getCgiPid() const { return _cgi_pid; }
         void setCgiPid(pid_t pid) { _cgi_pid = pid; }
 };

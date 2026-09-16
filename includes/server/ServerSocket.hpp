@@ -22,6 +22,8 @@ public:
 
     int getFd() const { return _fd; }
 	int	getPort() const { return _port; }
+
+	static void setNonBlocking(int fd);
 };
 
 #endif

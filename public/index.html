@@ -1,1 +1,80 @@
-defualt
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Webserv Tester</title>
+    <style>
+        body { font-family: sans-serif; margin: 40px; background-color: #1e1e1e; color: #d4d4d4; }
+        .card { background: #252526; padding: 20px; margin-bottom: 20px; border-radius: 8px; border: 1px solid #3c3c3c; }
+        h1, h2 { color: #569cd6; }
+        button { background: #0e639c; color: white; border: none; padding: 10px 15px; cursor: pointer; border-radius: 4px; margin-top: 10px;}
+        button:hover { background: #1177bb; }
+        input[type="text"] { padding: 8px; width: 300px; background: #3c3c3c; color: white; border: 1px solid #555; }
+        pre { background: #000; padding: 10px; color: #4af626; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <h1>Webserv - HTTP Methods & CGI Tester</h1>
+
+    <div class="card">
+        <h2>1. GET Method</h2>
+        <p>Wysyła standardowe zapytanie GET z parametrami w URL.</p>
+        <form action="/" method="GET">
+            <input type="text" name="search" value="hello webserv">
+            <button type="submit">Wyślij GET</button>
+        </form>
+    </div>
+
+    <div class="card">
+        <h2>2. POST Method (Zapis do pliku)</h2>
+        <p>Zapisze plik <strong>test_post.txt</strong> w katalogu <code>/upload</code> na serwerze.</p>
+        <form action="/upload/test_post.txt" method="POST">
+            <input type="text" name="file_content" value="Dane z formularza POST">
+            <button type="submit">Wyślij POST (Utwórz plik)</button>
+        </form>
+    </div>
+
+    <div class="card">
+        <h2>3. DELETE Method</h2>
+        <p>Usuwa plik z serwera za pomocą asynchronicznego zapytania Fetch.</p>
+        <input type="text" id="delete_target" value="/upload/test_post.txt">
+        <button onclick="sendDelete()">Wyślij DELETE</button>
+        <pre id="delete_result">Czeka na akcję...</pre>
+    </div>
+
+    <div class="card">
+        <h2>4. CGI Script (GET i POST)</h2>
+        <p>Wysyła dane do skryptu CGI, który parsowany jest przez <code>ExecCgi()</code>.</p>
+        
+        <form action="/cgi-bin/test.py" method="GET">
+            <input type="text" name="user" value="Sorbiii">
+            <button type="submit">Wyślij GET do CGI</button>
+        </form>
+        <br>
+        <form action="/cgi-bin/test.py" method="POST">
+            <input type="text" name="message" value="Wiadomość ukryta w ciele POST">
+            <button type="submit">Wyślij POST do CGI</button>
+        </form>
+    </div>
+
+    <script>
+        function sendDelete() {
+            const target = document.getElementById('delete_target').value;
+            const resultBox = document.getElementById('delete_result');
+            resultBox.innerText = `Wysyłanie DELETE na: ${target}...`;
+
+            fetch(target, { method: 'DELETE' })
+                .then(response => {
+                    resultBox.innerText = `Status: ${response.status} ${response.statusText}`;
+                    if(response.ok) {
+                        resultBox.innerText += "\nSukces: Plik został usunięty!";
+                    }
+                })
+                .catch(error => {
+                    resultBox.innerText = `Błąd połączenia: ${error}`;
+                });
+        }
+    </script>
+</body>
+</html>

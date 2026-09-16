@@ -12,12 +12,19 @@ int main(int argc, char **argv)
 		return 1;
 	}
 	Parser parser(argv[1]);
+	try
+	{
+		std::vector<ServerConfig> servers = parser.parse();
 
-	std::vector<ServerConfig> servers = parser.parse();
-
-	std::cout << "Successfully parsed " << servers.size() << " server(s)!\n" << std::endl;
-				
-	Poller	PollManager(servers);
-	PollManager.runPollLoop();
+		std::cout << "Successfully parsed " << servers.size() << " server(s)!\n" << std::endl;
+					
+		Poller	PollManager(servers);
+		PollManager.runPollLoop();
+	}
+	catch(const std::exception& e)
+	{
+		std::cerr << e.what() << '\n';
+	}
+	
 	return 0;
 }
