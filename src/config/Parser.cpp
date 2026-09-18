@@ -50,6 +50,14 @@ void Parser::parseLocationBlock(std::ifstream &file, LocationConfig &location)
 			std::string new_str = line.substr(space + 1);
 			location.default_file = trim(new_str);
 		}
+		else if (word == "root")
+		{
+			std::string new_str = line.substr(space + 1);
+			new_str = trim(new_str);
+			if (!new_str.empty() && new_str[new_str.size() - 1] == ';')
+				new_str.resize(new_str.size() - 1);
+			location.root = trim(new_str);
+		}
 		else if (word == "allowed_methods")
 		{
 			std::string new_str = line.substr(space + 1);
@@ -77,6 +85,9 @@ void Parser::parseLocationBlock(std::ifstream &file, LocationConfig &location)
 		{
 			std::string new_str = line.substr(space + 1);
 			new_str = trim(new_str);
+			if (!new_str.empty() && new_str[new_str.size() - 1] == ';') //
+				new_str.resize(new_str.size() - 1); //
+			new_str = trim(new_str); //
 			if (new_str == "off")
 				continue;
 			else if (new_str == "on")
@@ -114,6 +125,13 @@ void Parser::parseLocationBlock(std::ifstream &file, LocationConfig &location)
 				location.cgi_ext = trim(new_str.substr(0, sep));
 				location.cgi_path = trim(new_str.substr(sep + 1));
 			}
+		}
+		else if (word == "client_max_body_size")
+		{
+			std::string size_str = trim(line.substr(space + 1));
+			if (!size_str.empty() && size_str[size_str.size() - 1] == ';')
+				size_str.resize(size_str.size() - 1);
+			location.client_max_body_size = static_cast<size_t>(atoi(trim(size_str).c_str()));
 		}
 	}
 }

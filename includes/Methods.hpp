@@ -6,6 +6,7 @@
 class ClientContext;
 
 void    ExecMethods(ClientContext &ctx);
+void ClientContextRoute(ClientContext *ctx);
 
 // Method Get
 void    BuildHeaders(ClientContext& ctx, std::string full_path);

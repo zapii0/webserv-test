@@ -10,21 +10,31 @@
 #include <iostream>
 #include <vector>
 
+static std::string absolutePath(const std::string &path) {
+    if (path.empty() || path[0] == '/')
+        return path;
+    char cwd[4096];
+    if (getcwd(cwd, sizeof(cwd)) == NULL)
+        return path;
+    if (path.compare(0, 2, "./") == 0)
+        return std::string(cwd) + path.substr(1);
+    return std::string(cwd) + "/" + path;
+}
+
 bool isCgiRequest(ClientContext &ctx, std::string &script_path, std::string &interpreter) {
     const LocationConfig *matched_loc = NULL;
-    size_t max_len = 0;
     for (size_t i = 0; i < ctx.Config.locations.size(); ++i) {
-        const std::string &loc_path = ctx.Config.locations[i].path;
-        if (ctx.path.rfind(loc_path, 0) == 0) {
-            if (loc_path.length() > max_len) {
-                max_len = loc_path.length();
-                matched_loc = &ctx.Config.locations[i];
-            }
+        if (!ctx.Config.locations[i].cgi_ext.empty() &&
+            ctx.path.length() >= ctx.Config.locations[i].cgi_ext.length() &&
+            ctx.path.substr(ctx.path.length() - ctx.Config.locations[i].cgi_ext.length()) ==
+                ctx.Config.locations[i].cgi_ext) {
+            matched_loc = &ctx.Config.locations[i];
+            break;
         }
     }
 
     std::string ext = "";
-    if (matched_loc != NULL && !matched_loc->cgi_ext.empty()) {
+    if (matched_loc != NULL) {
         ext = matched_loc->cgi_ext;
     } else if (ctx.path.length() >= 3 && ctx.path.substr(ctx.path.length() - 3) == ".py") {
         ext = ".py";
@@ -38,17 +48,23 @@ bool isCgiRequest(ClientContext &ctx, std::string &script_path, std::string &int
             return false;
     }
 
-    std::string full_path = RootPathJoin(ctx.path, ctx.Config.root);
+    std::string full_path = ctx.resolved_path.empty() ?
+        RootPathJoin(ctx.path, ctx.Config.root) : ctx.resolved_path;
     if (access(full_path.c_str(), F_OK) != 0) {
         std::string alt_path = "." + ctx.path;
         if (access(alt_path.c_str(), F_OK) == 0)
             full_path = alt_path;
     }
 
-    script_path = full_path;
+    script_path = absolutePath(full_path);
 
-    if (matched_loc != NULL && !matched_loc->cgi_path.empty()) {
+    if (matched_loc != NULL && !matched_loc->cgi_path.empty() &&
+        access(matched_loc->cgi_path.c_str(), X_OK) == 0) {
         interpreter = matched_loc->cgi_path;
+    } else if (access("./cgi_test", X_OK) == 0) {
+        interpreter = absolutePath("./cgi_test");
+    } else if (access("./cgi_tester", X_OK) == 0) {
+        interpreter = absolutePath("./cgi_tester");
     } else {
         interpreter = "/usr/bin/python3";
     }
@@ -135,6 +151,11 @@ void ExecCgi(ClientContext &ctx, const std::string &script_path, const std::stri
         env_strings.push_back("SCRIPT_NAME=" + ctx.path);
         env_strings.push_back("SCRIPT_FILENAME=" + script_path);
         env_strings.push_back("PATH_INFO=" + ctx.path);
+        env_strings.push_back("REQUEST_URI=" + ctx.path);
+        env_strings.push_back("SERVER_NAME=" + ctx.Config.server_name);
+        std::stringstream ss_port;
+        ss_port << ctx.Config.port;
+        env_strings.push_back("SERVER_PORT=" + ss_port.str());
         env_strings.push_back("REDIRECT_STATUS=200");
 
         std::stringstream ss_len;

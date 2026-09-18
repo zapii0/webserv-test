@@ -102,6 +102,7 @@ void Poller::recvFromClient(int fd)
     
     char buffer[1024] = {0};
 
+    _clients.at(fd).last_activity = time(NULL);
     int bytes_read = recv(fd, buffer, sizeof(buffer) - 1, 0);
     
     if (bytes_read <= 0)
@@ -135,9 +136,11 @@ void Poller::recvFromClient(int fd)
 
     RequestParser CheckRequest(_clients.at(fd).raw_buffer);
     Result result = CheckRequest.parseRequest(_clients.at(fd));
-    
+    // std::cout << "Raw request: " << _clients.at(fd).raw_buffer << std::endl;
     if (result == PARSE_COMPLETE)
     {
+        std::cout << "\033[1;31m" << "request parsed successfully" << "\033[0m" << std::endl;
+        std::cout << "Raw request: " << _clients.at(fd).raw_buffer;
         ExecMethods(_clients.at(fd));
         if (_clients.at(fd).isCgi())
         {
@@ -162,6 +165,7 @@ void Poller::recvFromClient(int fd)
     }
     else if (result == PARSE_ERROR)
     {
+        std::cout << "Raw request: " << _clients.at(fd).raw_buffer;
         errorPageGetter(_clients.at(fd));
         BuildHeaders(_clients.at(fd), _clients.at(fd).path);
         for (size_t i = 0; i < _pollfds.size(); ++i)
@@ -189,6 +193,7 @@ void Poller::handleCgiPipe(int pipe_fd)
     }
 
     ClientContext &ctx = _clients.at(client_fd);
+    ctx.last_activity = time(NULL);
     char buffer[4096];
     ssize_t bytes_read = read(pipe_fd, buffer, sizeof(buffer));
 
@@ -239,6 +244,15 @@ void Poller::checkCgiTimeouts()
     for (std::map<int, ClientContext>::iterator it = _clients.begin(); it != _clients.end(); ++it)
     {
         ClientContext &ctx = it->second;
+
+        if (!ctx.isCgi() && now - ctx.last_activity >= 5)
+        {
+            close(it->first);
+            removePollFd(it->first);
+            _clients.erase(it->first);
+            return;
+        }
+
         if (ctx.isCgi() && ctx.cgi_start_time > 0 && (now - ctx.cgi_start_time) >= 5)
         {
             if (ctx.getCgiPid() > 0)
@@ -276,13 +290,66 @@ void Poller::checkCgiTimeouts()
 void Poller::sendToClient(int fd)
 {
     std::cout << "\033[1;31m" << "sending to client" << "\033[0m" << std::endl;
-    
-    std::string response = _clients.at(fd).response_headers + _clients.at(fd).response_body;
-    ssize_t sent = send(fd, response.c_str() + _clients.at(fd).getBytesSent(), response.size() - _clients.at(fd).getBytesSent(), 0);
-    if (sent > 0)
-        _clients.at(fd).addBytesSent(sent);
+    _clients.at(fd).last_activity = time(NULL);
 
-    if (response.size() == _clients.at(fd).getBytesSent() || sent <= 0)
+    std::string response = _clients.at(fd).response_headers + _clients.at(fd).response_body;
+    size_t offset = _clients.at(fd).getBytesSent();
+    size_t remaining = response.size() - offset;
+
+    std::cout << "Response:\n" << response << std::endl;
+    if (remaining == 0)
+    {
+        if (_clients.at(fd).isCgi())
+        {
+            if (_clients.at(fd).getCgiPid() > 0)
+            {
+                kill(_clients.at(fd).getCgiPid(), SIGKILL);
+                waitpid(_clients.at(fd).getCgiPid(), NULL, WNOHANG);
+            }
+            int pipe_fd = _clients.at(fd).cgi_pipe_out[0];
+            if (pipe_fd != -1)
+            {
+                close(pipe_fd);
+                removePollFd(pipe_fd);
+                _pipe_to_client_fd.erase(pipe_fd);
+            }
+        }
+        close(fd);
+        removePollFd(fd);
+        _clients.erase(fd);
+        return ;
+    }
+
+    ssize_t sent = send(fd, response.c_str() + offset, remaining, 0);
+    if (sent > 0)
+        _clients.at(fd).addBytesSent(static_cast<size_t>(sent));
+    else if (sent == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))
+        return ;
+    else
+    {
+        std::cerr << "send failed: " << std::strerror(errno) << std::endl;
+        if (_clients.at(fd).isCgi())
+        {
+            if (_clients.at(fd).getCgiPid() > 0)
+            {
+                kill(_clients.at(fd).getCgiPid(), SIGKILL);
+                waitpid(_clients.at(fd).getCgiPid(), NULL, WNOHANG);
+            }
+            int pipe_fd = _clients.at(fd).cgi_pipe_out[0];
+            if (pipe_fd != -1)
+            {
+                close(pipe_fd);
+                removePollFd(pipe_fd);
+                _pipe_to_client_fd.erase(pipe_fd);
+            }
+        }
+        close(fd);
+        removePollFd(fd);
+        _clients.erase(fd);
+        return ;
+    }
+
+    if (response.size() == _clients.at(fd).getBytesSent())
     {
         if (_clients.at(fd).isCgi())
         {
@@ -330,6 +397,11 @@ void Poller::runPollLoop()
             if (_pollfds[i].revents == 0)
                 continue;
             int fd = _pollfds[i].fd;
+
+            if (!isListeningSocket(fd) &&
+                _pipe_to_client_fd.find(fd) == _pipe_to_client_fd.end() &&
+                _clients.find(fd) == _clients.end())
+                continue;
 
             if (_pipe_to_client_fd.find(fd) != _pipe_to_client_fd.end())
             {

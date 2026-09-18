@@ -20,8 +20,10 @@ struct LocationConfig
 
 	std::string cgi_ext;
 	std::string cgi_path;
+	std::string root;
+	size_t client_max_body_size;
 
-	LocationConfig() : autoindex(false), return_code(0) {}// konstruktor domyślny
+	LocationConfig() : autoindex(false), return_code(0), client_max_body_size(0) {}// konstruktor domyślny
 };
 
 // struktura na przechowywanie pojedynczego servera
@@ -35,7 +37,7 @@ struct ServerConfig
 	std::map<int, std::string> error_pages;
 	std::vector<LocationConfig> locations;
 
-	ServerConfig() : port(80), client_max_body_size(1048576) {} // wartości domyślne w razie jakby w pliku konfiguracyjnym nie było informacji o tym
+	ServerConfig() : port(80), host("127.0.0.1"), client_max_body_size(1048576) {} // wartości domyślne w razie jakby w pliku konfiguracyjnym nie było informacji o tym
 };
 
 class Parser

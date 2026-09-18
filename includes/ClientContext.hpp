@@ -43,9 +43,12 @@ class ClientContext {
         std::string raw_buffer;
         std::string method;
         std::string path;
+        std::string resolved_path;
+        std::string redirect_location;
         std::string query_string;
         std::map<std::string, std::string> headers;
         std::string request_body;
+        time_t last_activity;
 
         int status_code;
         std::string response_headers;
@@ -64,6 +67,7 @@ class ClientContext {
               _cgi_pid(-1), 
               _is_cgi(false),
               Config(),
+              last_activity(time(NULL)),
               status_code(200),
               cgi_raw_output(""),
               cgi_start_time(0)

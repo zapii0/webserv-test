@@ -2,8 +2,9 @@
 #include "../../includes/Methods.hpp"
 #include <sstream>
 
-void    GetMethod(ClientContext& ctx) {
-    std::string full_path = RootPathJoin(ctx.path, ctx.Config.root);
+void GetMethod(ClientContext& ctx) {
+    std::string full_path = ctx.resolved_path.empty() ? ctx.path : ctx.resolved_path;
+
     if (isPathSafe(full_path))
         FileCheck(full_path, ctx);
     else
@@ -68,6 +69,9 @@ void    BuildHeaders(ClientContext& ctx, std::string full_path) {
     ctx.response_headers = "HTTP/1.1 " + status_ss.str() + " " + status_msg + "\r\n";
     ctx.response_headers += "Content-Type: " + mimeType + "\r\n";
     ctx.response_headers += "Content-Length: " + len_ss.str() + "\r\n";
+    ctx.response_headers += "Connection: close\r\n";
+    if (!ctx.redirect_location.empty())
+        ctx.response_headers += "Location: " + ctx.redirect_location + "\r\n";
     ctx.response_headers += "\r\n";
 }
 
